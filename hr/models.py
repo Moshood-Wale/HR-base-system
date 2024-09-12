@@ -5,12 +5,16 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 from .enum import ROLE_CHOICES, STAFF_ROLE_CHOICES, STATUS
+from .managers import CustomUserManager
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 # Custom User Model
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    username = None  # Remove username field
     email = models.EmailField(unique=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='USER')
     organisation = models.ForeignKey(
         'Organisation', on_delete=models.SET_NULL, null=True, blank=True, related_name='members'
@@ -19,23 +23,38 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = CustomUserManager()
+
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']
+    REQUIRED_FIELDS = ['name']
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self):
         return self.email
+
+    def get_tokens(self):
+        refresh = RefreshToken.for_user(self)
+        return {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
 
 
 # Organisation Model
 class Organisation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, blank=True, null=True)
     valuation = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     location = models.CharField(max_length=255, null=True, blank=True)
     admin = models.OneToOneField(User, on_delete=models.CASCADE, related_name='organisation_admin')
     staff_access_code = models.CharField(max_length=3, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self):
         return self.name
@@ -58,11 +77,14 @@ class Job(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='jobs')
     organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE, related_name='jobs')
-    title = models.CharField(max_length=255)
-    description = models.CharField(max_length=500)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=500, blank=True, null=True)
     is_open = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self):
         return self.title
@@ -73,10 +95,13 @@ class Application(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='applications')
     applicant = models.ForeignKey(User, on_delete=models.CASCADE, related_name='applications')
-    skill_description = models.CharField(max_length=500)
+    skill_description = models.CharField(max_length=500, blank=True, null=True)
     status = models.CharField(max_length=10, choices=STATUS, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self):
         return f"Application by {self.applicant.email} for {self.job.title}"
@@ -90,6 +115,9 @@ class OrganisationStaff(models.Model):
     role = models.CharField(max_length=10, choices=STAFF_ROLE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self):
         return f"{self.user.email} as {self.get_role_display()} at {self.organisation.name}"
