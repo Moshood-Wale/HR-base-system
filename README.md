@@ -140,11 +140,11 @@ API documentation is available at `http://127.0.0.1:8000/api/v1/doc/#/` when the
 
 The deployment is done on Digital Ocean. 
 
-The API should now be accessible at `http://localhost:8000/api/v1/`.
+The API should now be accessible at `http://143.244.150.92/api/v1/`.
 
 ## API Documentation
 
-API documentation is available at `http://127.0.0.1:8000/api/v1/doc/#/` when the server is running.
+API documentation is available at `http://143.244.150.92/api/v1/doc/` when the server is running.
 
 ## License
 
