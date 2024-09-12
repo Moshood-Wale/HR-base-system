@@ -35,6 +35,7 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "localhost",
     "api",
+    "143.244.150.92",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
