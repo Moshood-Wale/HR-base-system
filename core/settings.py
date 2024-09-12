@@ -10,9 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 import dj_database_url
 from decouple import config
+from datetime import timedelta
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -28,7 +30,19 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "0.0.0.0",
+    "localhost",
+    "api",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://localhost"
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
@@ -42,9 +56,16 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'hr',
+    'debug_toolbar',
+    'corsheaders',
+    'drf_spectacular',
+    'rest_framework_simplejwt',
 ]
 
 MIDDLEWARE = [
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -82,6 +103,41 @@ DATABASES = {
     'default': dj_database_url.config(default=config("DATABASE_URL"))
 }
 
+SWAGGER_SETTINGS = {
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "DEFAULT_GENERATOR_CLASS": "drf_spectacular.generators.SchemaGenerator",
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "COMPONENT_SPLIT_PATCH": True,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+        "displayOperationId": True,
+        "displayRequestDuration": True,
+    },
+    "UPLOADED_FILES_USE_URL": True,
+    "TITLE": "HR-BASE API",
+    "DESCRIPTION": "HR-BASE API Doc",
+    "VERSION": "1.0.0",
+    "LICENCE": {"name": "BSD License"},
+    # Oauth2 related settings. used for example by django-oauth2-toolkit.
+    # https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.3.md#oauth-flows-object
+    "OAUTH2_FLOWS": [],
+    "OAUTH2_AUTHORIZATION_URL": None,
+    "OAUTH2_TOKEN_URL": None,
+    "OAUTH2_REFRESH_URL": None,
+    "OAUTH2_SCOPES": None,
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -101,6 +157,34 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ),
+    "TEST_REQUEST_DEFAULT_FORMAT": "json",
+}
+
+
+JWT_SIGNING_KEY = os.getenv('JWT_SIGNING_KEY')
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
+    "SIGNING_KEY": JWT_SIGNING_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "TOKEN_TYPE_CLAIM": "token_type",
+    "JTI_CLAIM": "jti",
+    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
+    "SLIDING_TOKEN_LIFETIME": timedelta(days=7),
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=14),
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/

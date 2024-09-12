@@ -10,16 +10,20 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={'input_type': 'password'})
-    password_confirm = serializers.CharField(write_only=True, style={'input_type': 'password'})
+    confirm_password = serializers.CharField(write_only=True, style={'input_type': 'password'})
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'username', 'password', 'password_confirm', 'role', 'organisation']
+        fields = ['id', 'email', 'name', 'password', 'confirm_password', 'role', 'organisation']
         read_only_fields = ['id', 'role', 'organisation']
 
     def validate_email(self, email):
+        if not email:
+            raise serializers.ValidationError("Email is required.")
+        
+        email = email.lower().strip()
         try:
-            email = validate_email(email.lower().strip()).email
+            validate_email(email)
         except DjangoValidationError as e:
             raise serializers.ValidationError(str(e))
 
@@ -27,6 +31,11 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Account with this email already exists")
 
         return email
+
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Name cannot be empty.")
+        return value.strip()
 
     def validate_password(self, value):
         if len(value) < 8:
@@ -42,15 +51,15 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        if data['password'] != data['password_confirm']:
-            raise serializers.ValidationError({"password_confirm": "Passwords do not match."})
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
         return data
 
     def create(self, validated_data):
-        validated_data.pop('password_confirm')
+        validated_data.pop('confirm_password')
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username'],
+            name=validated_data['name'],
             password=validated_data['password'],
             role='USER'  # Set default role to USER
         )
@@ -120,27 +129,22 @@ class JobSerializer(serializers.ModelSerializer):
 
 class ApplicationSerializer(serializers.ModelSerializer):
     applicant = serializers.PrimaryKeyRelatedField(read_only=True)
+    job = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Application
         fields = ['id', 'job', 'applicant', 'skill_description', 'status']
-
-    def validate(self, data):
-        user = self.context['request'].user
-        job = data['job']
-        if user.organisation == job.organisation:
-            raise serializers.ValidationError("You cannot apply to a job in your own organisation.")
-        if Application.objects.filter(applicant=user, job=job).exists():
-            raise serializers.ValidationError("You have already applied to this job.")
-        return data
+        read_only_fields = ['id', 'job', 'applicant', 'status']
 
     def create(self, validated_data):
         user = self.context['request'].user
-        application = Application.objects.create(applicant=user, **validated_data)
+        job = self.context['job']
+        application = Application.objects.create(applicant=user, job=job, **validated_data)
         return application
 
 
 class OrganisationStaffSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = OrganisationStaff
         fields = ['id', 'organisation', 'user', 'role']
@@ -157,6 +161,10 @@ class JoinOrganisationSerializer(serializers.Serializer):
     org_access_code = serializers.CharField(max_length=3)
 
     def validate(self, data):
+        user = self.context['request'].user
+        if user.organisation or user.role != 'USER':
+            raise serializers.ValidationError("You are already part of an organization or have a special role.")
+        
         try:
             organisation = Organisation.objects.get(staff_access_code=data['org_access_code'])
         except Organisation.DoesNotExist:
@@ -168,11 +176,13 @@ class JoinOrganisationSerializer(serializers.Serializer):
     def create(self, validated_data):
         user = self.context['request'].user
         organisation = validated_data['organisation']
+        
         staff = OrganisationStaff.objects.create(
             organisation=organisation,
             user=user,
             role='ORG_STAFF'
         )
+     
         user.organisation = organisation
         user.role = 'ORG_STAFF'
         user.save()
@@ -203,3 +213,18 @@ class RemoveStaffSerializer(serializers.Serializer):
         user.save()
         staff.delete()
         return user
+
+
+class AssignHRRoleSerializer(serializers.Serializer):
+    staff_id = serializers.UUIDField()
+
+    def validate_staff_id(self, value):
+        try:
+            staff = OrganisationStaff.objects.get(id=value)
+        except OrganisationStaff.DoesNotExist:
+            raise serializers.ValidationError("Staff member not found.")
+        
+        if staff.role == 'ORG_HR':
+            raise serializers.ValidationError("This staff member is already an HR.")
+        
+        return value
